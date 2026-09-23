@@ -9,8 +9,6 @@ from PySide6.QtWidgets import (
     QTableView,
 )
 
-from view.constants import TABLE_STYLE
-
 
 class BaseTableView(QTableView):
     """带 Excel 风格粘贴能力的表格视图基类。"""
@@ -19,6 +17,7 @@ class BaseTableView(QTableView):
 
     ROW_HEIGHT = 34
     HEADER_HEIGHT = 36
+    SHOW_VERTICAL_HEADER = True
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -46,6 +45,14 @@ class BaseTableView(QTableView):
 
     # ------------------------------------------------------------------
     def keyPressEvent(self, event) -> None:
+        if event.matches(QKeySequence.Cut):
+            self._handle_cut()
+            event.accept()
+            return
+        if event.matches(QKeySequence.Delete):
+            self._handle_clear()
+            event.accept()
+            return
         if event.matches(QKeySequence.Paste):
             self._handle_paste()
             event.accept()
@@ -54,7 +61,6 @@ class BaseTableView(QTableView):
 
     # ------------------------------------------------------------------
     def _configure_base(self) -> None:
-        self.setStyleSheet(TABLE_STYLE)
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.setEditTriggers(
@@ -63,7 +69,9 @@ class BaseTableView(QTableView):
             | QAbstractItemView.AnyKeyPressed
         )
         self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        # 两个方向的滚动条都不显示（滚轮/方向键仍可滚动，行不会丢失可达性）
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setFrameShape(QFrame.NoFrame)
         self.setShowGrid(True)
         self.setWordWrap(False)
@@ -78,6 +86,71 @@ class BaseTableView(QTableView):
         vertical.setDefaultSectionSize(self.ROW_HEIGHT)
         vertical.setSectionResizeMode(QHeaderView.Fixed)
         vertical.setHighlightSections(False)
+        vertical.setVisible(self.SHOW_VERTICAL_HEADER)
+
+    def _handle_cut(self) -> None:
+        """剪切：选区文本写入剪贴板并清空单元格（清空姓名会删除整行）。"""
+        selection = self.selectionModel()
+        model = self.model()
+        if selection is None or model is None:
+            return
+
+        indexes = selection.selectedIndexes()
+        if not indexes:
+            return
+
+        rows = sorted({index.row() for index in indexes})
+        columns = sorted({index.column() for index in indexes})
+        row_at = {row: pos for pos, row in enumerate(rows)}
+        column_at = {column: pos for pos, column in enumerate(columns)}
+
+        # 1) 先把选区读成剪贴板矩阵（tab 分列、换行分行，与粘贴格式互通）
+        matrix = [["" for _ in columns] for _ in rows]
+        for index in indexes:
+            matrix[row_at[index.row()]][column_at[index.column()]] = index.data() or ""
+        QApplication.clipboard().setText(
+            "\n".join("\t".join(row_values) for row_values in matrix)
+        )
+
+        # 2) 再清空选区
+        self._clear_cells(rows, columns)
+
+    def _handle_clear(self) -> None:
+        """Delete：清空选中单元格内容（清空姓名会删除整行）。"""
+        selection = self.selectionModel()
+        model = self.model()
+        if selection is None or model is None:
+            return
+
+        indexes = selection.selectedIndexes()
+        if not indexes:
+            return
+
+        rows = sorted({index.row() for index in indexes})
+        columns = sorted({index.column() for index in indexes})
+        self._clear_cells(rows, columns)
+
+    def _clear_cells(self, rows, columns) -> None:
+        """清空指定行列的单元格。
+
+        清空姓名会删除整行、令后续行号上移，用 shift 补偿；
+        某行删除后，该行剩余单元格随之消失，跳过即可。
+        """
+        model = self.model()
+        shift = 0
+        for row in rows:
+            target = row - shift
+            if target >= model.rowCount():
+                break
+            row_deleted = False
+            for column in columns:
+                before = model.rowCount()
+                model.setData(model.index(target, column), "", Qt.EditRole)
+                if model.rowCount() < before:
+                    row_deleted = True
+                    break
+            if row_deleted:
+                shift += 1
 
     def _handle_paste(self) -> None:
         text = QApplication.clipboard().text()
@@ -91,14 +164,13 @@ class BaseTableView(QTableView):
 
         indexes = selection.selectedIndexes()
         if not indexes:
+            # 表格被清空后没有任何可选单元格，允许直接粘贴到起点
+            if model.rowCount() == 0:
+                self.pasteRequested.emit(0, 0, text)
             return
 
         rows = sorted({index.row() for index in indexes})
         columns = sorted({index.column() for index in indexes})
         start_row, start_column = rows[0], columns[0]
-
-        # 整列粘贴时跳过第 0 行（前缀 / 默认消息配置行），从第一个用户行开始写入
-        if start_row == 0 and len(rows) == model.rowCount():
-            start_row = 1
 
         self.pasteRequested.emit(start_row, start_column, text)

@@ -1,11 +1,11 @@
 # main.py
 import sys
 
-from bootstrap import AppRunner
+from bootstrap.apprunner import apprunner
 
 
 def main() -> int:
-    return AppRunner().run()
+    return apprunner().run()
 
 
 if __name__ == "__main__":

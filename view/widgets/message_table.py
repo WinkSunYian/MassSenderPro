@@ -4,7 +4,9 @@ from view.widgets.base_table_view import BaseTableView
 
 
 class MessageTable(BaseTableView):
-    """所有消息列所在的表格（卡片二）。"""
+    """所有消息列所在的表格（卡片二）。隐藏行号与「前缀」表头。"""
+
+    SHOW_VERTICAL_HEADER = False
 
     def visible_columns(self):
         model = self.model()

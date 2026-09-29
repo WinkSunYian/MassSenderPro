@@ -53,6 +53,10 @@ class BaseTableView(QTableView):
 
     # ------------------------------------------------------------------
     def keyPressEvent(self, event) -> None:
+        if event.matches(QKeySequence.Copy):
+            self._handle_copy()
+            event.accept()
+            return
         if event.matches(QKeySequence.Cut):
             self._handle_cut()
             event.accept()
@@ -96,32 +100,58 @@ class BaseTableView(QTableView):
         vertical.setHighlightSections(False)
         vertical.setVisible(self.SHOW_VERTICAL_HEADER)
 
+    def _handle_copy(self) -> None:
+        """Ctrl+C：有选中 → 整块写入剪贴板（多选一起复制，不清空单元格）；
+        无选中 → 回落复制当前格。"""
+        found = self._selected_matrix()
+        if found is None:
+            current = self.currentIndex()
+            text = current.data() if current.isValid() else ""
+            if text:
+                QApplication.clipboard().setText(text)
+            return
+        text = self._matrix_text(found[2])
+        if text:
+            QApplication.clipboard().setText(text)
+
     def _handle_cut(self) -> None:
         """剪切：选区文本写入剪贴板并清空单元格（清空姓名会删除整行）。"""
+        found = self._selected_matrix()
+        if found is None:
+            return
+        rows, columns, matrix = found
+
+        # 1) 先把选区写成剪贴板矩阵（tab 分列、换行分行，与粘贴格式互通）
+        QApplication.clipboard().setText(self._matrix_text(matrix))
+
+        # 2) 再清空选区
+        self._clear_cells(rows, columns)
+
+    def _selected_matrix(self):
+        """选区读成 (行号升序, 列号升序, 矩阵)；无模型/无选区 → None。"""
         selection = self.selectionModel()
         model = self.model()
         if selection is None or model is None:
-            return
+            return None
 
         indexes = selection.selectedIndexes()
         if not indexes:
-            return
+            return None
 
         rows = sorted({index.row() for index in indexes})
         columns = sorted({index.column() for index in indexes})
         row_at = {row: pos for pos, row in enumerate(rows)}
         column_at = {column: pos for pos, column in enumerate(columns)}
 
-        # 1) 先把选区读成剪贴板矩阵（tab 分列、换行分行，与粘贴格式互通）
         matrix = [["" for _ in columns] for _ in rows]
         for index in indexes:
             matrix[row_at[index.row()]][column_at[index.column()]] = index.data() or ""
-        QApplication.clipboard().setText(
-            "\n".join("\t".join(row_values) for row_values in matrix)
-        )
+        return rows, columns, matrix
 
-        # 2) 再清空选区
-        self._clear_cells(rows, columns)
+    @staticmethod
+    def _matrix_text(matrix) -> str:
+        """矩阵 → 剪贴板文本：tab 分列、换行分行，与粘贴解析互通。"""
+        return "\n".join("\t".join(row_values) for row_values in matrix)
 
     def _handle_clear(self) -> None:
         """Delete：清空选中单元格内容（清空具名行会删除整行，空输入行保持）。"""

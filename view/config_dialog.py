@@ -18,8 +18,9 @@
 from typing import List
 
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QFrame,
     QHBoxLayout,
@@ -44,6 +45,20 @@ def _mix(base: QColor, over: QColor, t: float) -> QColor:
         round(base.green() + (over.green() - base.green()) * t),
         round(base.blue() + (over.blue() - base.blue()) * t),
     )
+
+
+def _copy_selected_rows(list_widget: QListWidget) -> bool:
+    """Ctrl+C：多选行按行序整块复制；无选中回落复制当前行；都没有 → False。"""
+    items = list_widget.selectedItems()
+    if items:
+        items.sort(key=list_widget.row)
+        QApplication.clipboard().setText("\n".join(item.text() for item in items))
+        return True
+    current = list_widget.currentItem()
+    if current is not None:
+        QApplication.clipboard().setText(current.text())
+        return True
+    return False
 
 
 class PrefixConfigPage(QWidget):
@@ -126,9 +141,16 @@ class PrefixConfigPage(QWidget):
         return label
 
     def eventFilter(self, obj, event):
-        if obj is self._list and event.type() in (QEvent.Resize, QEvent.Show):
-            self._empty.setGeometry(self._list.rect())
-            self._empty.raise_()
+        if obj is self._list:
+            if event.type() in (QEvent.Resize, QEvent.Show):
+                self._empty.setGeometry(self._list.rect())
+                self._empty.raise_()
+            elif event.type() == QEvent.KeyPress and event.matches(
+                QKeySequence.Copy
+            ):
+                # 先于列表自身（Qt 默认只复制当前行）：多选整块、无选中回落当前行；
+                # 复制成功 → 返回 True 拦截，防止 Qt 默认再拿当前行覆盖剪贴板
+                return _copy_selected_rows(self._list)
         return super().eventFilter(obj, event)
 
     def keyPressEvent(self, event) -> None:
@@ -268,9 +290,16 @@ class KeywordConfigPage(QWidget):
         return label
 
     def eventFilter(self, obj, event):
-        if obj is self._list and event.type() in (QEvent.Resize, QEvent.Show):
-            self._empty.setGeometry(self._list.rect())
-            self._empty.raise_()
+        if obj is self._list:
+            if event.type() in (QEvent.Resize, QEvent.Show):
+                self._empty.setGeometry(self._list.rect())
+                self._empty.raise_()
+            elif event.type() == QEvent.KeyPress and event.matches(
+                QKeySequence.Copy
+            ):
+                # 先于列表自身（Qt 默认只复制当前行）：多选整块、无选中回落当前行；
+                # 复制成功 → 返回 True 拦截，防止 Qt 默认再拿当前行覆盖剪贴板
+                return _copy_selected_rows(self._list)
         return super().eventFilter(obj, event)
 
     def keyPressEvent(self, event) -> None:

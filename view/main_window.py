@@ -1,7 +1,6 @@
 # view/main_window.py
 import os
 
-import app_paths
 from PySide6.QtCore import QEvent, QPoint, QRect, Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -75,7 +74,9 @@ class MainWindow(QMainWindow):
 
         # 发送链路：名册落盘服务 + 发送调度器（内部驱动 SendWorker 线程）
         # 失败名册写 %APPDATA%\MassSenderPro\logs（打包后安装目录不可写）
-        self._roster_service = RosterServiceImpl(logs_dir=app_paths.logs_dir())
+        self._roster_service = RosterServiceImpl(
+            logs_dir=os.path.expandvars(r"%APPDATA%\MassSenderPro\logs")
+        )
         self._scheduler = SendSchedulerImpl(self._roster_service, self)
         # 跳过关键字配置（配置弹窗读写同一份 configs/skip_keywords.txt）
         self._skip_config = SkipKeywordConfig()

@@ -34,6 +34,10 @@ class CardFrame(QFrame):
     def add_widget(self, widget) -> None:
         self._layout.addWidget(widget)
 
-    def add_header_widget(self, widget) -> None:
-        """在标题行右侧（卡片右上角）添加控件。"""
-        self._header_layout.addWidget(widget)
+    def add_header_widget(self, widget, alignment=None) -> None:
+        """在标题行右侧（卡片右上角）添加控件。
+
+        alignment：可选的垂直对齐（如 Qt.AlignTop）。标题行会随卡片长高，
+        不给 AlignTop 的控件会被拉伸到整行高、底边贴住下方内容。
+        """
+        self._header_layout.addWidget(widget, 0, alignment or Qt.AlignTop)

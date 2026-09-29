@@ -1,3 +1,9 @@
 venv/
 __pycache__/
 *.pyc
+logs/
+# 旧配置位置（现已读写 %APPDATA%\MassSenderPro\configs\）
+configs/
+# PyInstaller 产物（打包配置 MassSenderPro.spec 需要保留在仓库里）
+build/
+dist/

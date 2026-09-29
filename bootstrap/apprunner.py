@@ -1,10 +1,13 @@
 # bootstrap/apprunner.py
 """应用启动引导：负责创建 QApplication、主窗口并进入事件循环。"""
+import os
 import sys
 from typing import List, Optional
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
+import app_paths
 from view import MainWindow
 
 
@@ -27,6 +30,10 @@ class apprunner:
     def run(self) -> int:
         """启动应用并返回事件循环的退出码。"""
         self._app = QApplication(self._argv)
+        # 窗口/任务栏图标：源码与包内都从 resources/ 取（缺失则用系统默认）
+        icon_path = app_paths.resource_path("resources", "icon.ico")
+        if os.path.exists(icon_path):
+            self._app.setWindowIcon(QIcon(icon_path))
         self._window = MainWindow()
         self._window.show()
         return self._app.exec()

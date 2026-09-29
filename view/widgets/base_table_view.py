@@ -9,6 +9,9 @@ from PySide6.QtWidgets import (
     QTableView,
 )
 
+from view.clipboard_util import clipboard_file_or_text, clipboard_has_urls
+from view.models.sheet_model import SheetModel
+
 
 class BaseTableView(QTableView):
     """带 Excel 风格粘贴能力的表格视图基类。"""
@@ -42,6 +45,11 @@ class BaseTableView(QTableView):
         visible = set(self.visible_columns())
         for column in range(model.columnCount()):
             self.setColumnHidden(column, column not in visible)
+        # 删列后 Qt 的 Stretch 表头不会自动重分发宽度（会残留旧列宽+死区，
+        # 甚至残留已删列的旧像素，看起来像列没减少），这里强制重排并刷新视口，
+        # 保证剩余消息列始终铺满卡片宽度
+        self.horizontalHeader().resizeSections()
+        self.viewport().update()
 
     # ------------------------------------------------------------------
     def keyPressEvent(self, event) -> None:
@@ -116,7 +124,7 @@ class BaseTableView(QTableView):
         self._clear_cells(rows, columns)
 
     def _handle_clear(self) -> None:
-        """Delete：清空选中单元格内容（清空姓名会删除整行）。"""
+        """Delete：清空选中单元格内容（清空具名行会删除整行，空输入行保持）。"""
         selection = self.selectionModel()
         model = self.model()
         if selection is None or model is None:
@@ -135,6 +143,7 @@ class BaseTableView(QTableView):
 
         清空姓名会删除整行、令后续行号上移，用 shift 补偿；
         某行删除后，该行剩余单元格随之消失，跳过即可。
+        空姓名输入行清空时保持不动（它就是必须存在的空单元格）。
         """
         model = self.model()
         shift = 0
@@ -153,10 +162,6 @@ class BaseTableView(QTableView):
                 shift += 1
 
     def _handle_paste(self) -> None:
-        text = QApplication.clipboard().text()
-        if not text:
-            return
-
         selection = self.selectionModel()
         model = self.model()
         if selection is None or model is None:
@@ -164,13 +169,24 @@ class BaseTableView(QTableView):
 
         indexes = selection.selectedIndexes()
         if not indexes:
-            # 表格被清空后没有任何可选单元格，允许直接粘贴到起点
+            # 表格被清空后没有任何可选单元格，允许直接粘贴到姓名列起点
             if model.rowCount() == 0:
-                self.pasteRequested.emit(0, 0, text)
+                text = self._paste_text_for(SheetModel.NAME_COLUMN)
+                if text:
+                    self.pasteRequested.emit(0, 0, text)
             return
 
         rows = sorted({index.row() for index in indexes})
         columns = sorted({index.column() for index in indexes})
-        start_row, start_column = rows[0], columns[0]
+        text = self._paste_text_for(columns[0])
+        if not text:
+            return
+        self.pasteRequested.emit(rows[0], columns[0], text)
 
-        self.pasteRequested.emit(start_row, start_column, text)
+    def _paste_text_for(self, column: int) -> str:
+        """取粘贴文本：姓名列禁止粘贴文件/链接，只认纯文本。"""
+        if column == SheetModel.NAME_COLUMN:
+            if clipboard_has_urls():
+                return ""
+            return QApplication.clipboard().text()
+        return clipboard_file_or_text()

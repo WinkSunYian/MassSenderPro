@@ -16,7 +16,13 @@ STATUS_TEXT = {
     CellStatus.PENDING: "等待发送",
     CellStatus.SENDING: "发送中…",
     CellStatus.SUCCESS: "发送成功",
-    CellStatus.FAILED: "发送失败：网络超时",
+    CellStatus.FAILED: "发送失败",
     CellStatus.WARNING: "发送异常：未收到回执",
-    CellStatus.SKIPPED: "已跳过：内容为空",
+    CellStatus.SKIPPED: "已跳过：备注包含关键字",
 }
+
+# 名单里消息全空的行：按新口径计入「失败」
+FAILED_EMPTY_TEXT = "失败：内容为空"
+
+# 顶部「姓名前缀」下拉列表的固定项（增删在「配置中心」里完成）
+NO_PREFIX_LABEL = "（无前缀）"
